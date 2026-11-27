@@ -10,4 +10,15 @@
       <ProjectReference Include="..\HollowCake.Bot.Core\HollowCake.Bot.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <PackageReference Include="NetCord.Services" Version="1.0.0-beta.30" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <Folder Include="Exceptions\" />
+      <Folder Include="Extensions\" />
+      <Folder Include="Interactions\" />
+      <Folder Include="Responses\" />
+    </ItemGroup>
+
 </Project>
