@@ -1,4 +1,4 @@
-﻿using global::NetCord;
+﻿using NetCord;
 
 namespace HollowCake.Bot.NetCord.Exceptions;
 

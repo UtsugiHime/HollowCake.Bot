@@ -1,4 +1,4 @@
-﻿using global::NetCord;
+﻿using NetCord;
 using HollowCake.Bot.Core.Exceptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
@@ -37,7 +37,7 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
         IServiceProvider services) 
         => HandleAsync(result, context.Interaction, logger, client, services);
 
-    private async ValueTask HandleAsync(
+    internal async ValueTask HandleAsync(
         IExecutionResult result,
         Interaction interaction,
         ILogger logger,
