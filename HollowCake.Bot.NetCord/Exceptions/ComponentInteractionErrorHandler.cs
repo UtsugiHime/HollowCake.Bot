@@ -18,7 +18,5 @@ public sealed class ComponentInteractionErrorHandler<TContext>(InteractionErrorH
         => handler.HandleAsync(
             result,
             context.Interaction,
-            logger,
-            client,
-            services);
+            logger);
 }
