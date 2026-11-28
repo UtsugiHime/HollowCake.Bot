@@ -46,7 +46,7 @@ public sealed class InteractionErrorHandler(
         
         try
         {
-            await RespondAsync(interaction, embed);
+            await RespondUnknownAsync(interaction, embed);
         }
         catch (Exception e)
         {
@@ -78,6 +78,26 @@ public sealed class InteractionErrorHandler(
     }
 
     private async Task RespondAsync(Interaction interaction, EmbedProperties embed)
+    {
+        switch (responses.GetState(interaction))
+        {
+            case InteractionResponseState.DeferredMessage:
+                await responses.ModifyResponseAsync(interaction, embed);
+                break;
+            
+            case InteractionResponseState.DeferredUpdate:
+            case InteractionResponseState.Acknowledged:
+                await responses.FollowupAsync(interaction, embed, true);
+                break;
+            
+            case InteractionResponseState.Unknown:
+            default:
+                await RespondUnknownAsync(interaction, embed);
+                break;
+        }
+    }
+    
+    private async Task RespondUnknownAsync(Interaction interaction, EmbedProperties embed)
     {
         try
         {

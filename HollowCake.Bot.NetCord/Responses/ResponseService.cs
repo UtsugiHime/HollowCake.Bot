@@ -5,28 +5,57 @@ namespace HollowCake.Bot.NetCord.Responses;
 
 public sealed class ResponseService(RestClient rest)
 {
+    private readonly InteractionResponseStateTracker _tracker = new();
+    
+    internal InteractionResponseState GetState(Interaction interaction) 
+        => _tracker.GetState(interaction);
+    
     // Raw methods
     public async Task RespondAsync(Interaction interaction, InteractionMessageProperties message)
-        => await interaction.SendResponseAsync(InteractionCallback.Message(message));
+    {
+        await interaction.SendResponseAsync(InteractionCallback.Message(message));
+        _tracker.SetState(interaction, InteractionResponseState.Acknowledged);
+    }
 
     public async Task DeferAsync(Interaction interaction, bool ephemeral = false)
-        => await interaction.SendResponseAsync(
+    {
+        await interaction.SendResponseAsync(
             InteractionCallback.DeferredMessage(ephemeral ? MessageFlags.Ephemeral : null));
+        _tracker.SetState(interaction, InteractionResponseState.DeferredMessage);
+    }
 
     public async Task DeferUpdateAsync(ComponentInteraction interaction)
-        => await interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
-    
-    public Task<RestMessage> ModifyResponseAsync(Interaction interaction, Action<MessageOptions> modify)
-        => rest.ModifyInteractionResponseAsync(interaction.ApplicationId, interaction.Token, modify);
-    
-    public Task<RestMessage> FollowupAsync(Interaction interaction, InteractionMessageProperties message)
-        => rest.SendInteractionFollowupMessageAsync(interaction.ApplicationId, interaction.Token, message);
-    
+    {
+        await interaction.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
+        _tracker.SetState(interaction, InteractionResponseState.DeferredUpdate);
+    }
+
+    public async Task<RestMessage> ModifyResponseAsync(Interaction interaction, Action<MessageOptions> modify)
+    {
+        var message = await rest.ModifyInteractionResponseAsync(interaction.ApplicationId, interaction.Token, modify);
+        CompleteDeferral(interaction);
+        return message;
+    }
+
+    public async Task<RestMessage> FollowupAsync(Interaction interaction, InteractionMessageProperties message)
+    {
+        var response = await rest.SendInteractionFollowupMessageAsync(
+            interaction.ApplicationId, interaction.Token, message);
+        
+        if (_tracker.GetState(interaction) is InteractionResponseState.DeferredMessage)
+            CompleteDeferral(interaction);
+        
+        return response;
+    }
+
     public Task<RestMessage> GetResponseAsync(Interaction interaction)
         => rest.GetInteractionResponseAsync(interaction.ApplicationId, interaction.Token);
     
-    public Task DeleteResponseAsync(Interaction interaction)
-        => rest.DeleteInteractionResponseAsync(interaction.ApplicationId, interaction.Token);
+    public async Task DeleteResponseAsync(Interaction interaction)
+    {
+        await rest.DeleteInteractionResponseAsync(interaction.ApplicationId, interaction.Token);
+        CompleteDeferral(interaction);
+    }
 
     // Convenience methods
     public Task RespondAsync(Interaction interaction, EmbedProperties embed, bool ephemeral = false)
@@ -106,4 +135,12 @@ public sealed class ResponseService(RestClient rest)
     
     public Task DeleteFollowupAsync(Interaction interaction, ulong messageId)
         => rest.DeleteInteractionFollowupMessageAsync(interaction.ApplicationId, interaction.Token, messageId);
+    
+    // Helpers
+    private void CompleteDeferral(Interaction interaction)
+    {
+        var state = _tracker.GetState(interaction);
+        if (state is InteractionResponseState.DeferredMessage or InteractionResponseState.DeferredUpdate)
+            _tracker.SetState(interaction, InteractionResponseState.Acknowledged);
+    }
 }
