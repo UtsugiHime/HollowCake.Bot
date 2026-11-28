@@ -1,7 +1,7 @@
 ﻿using NetCord;
 using HollowCake.Bot.Core.Exceptions;
+using HollowCake.Bot.NetCord.Responses;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.DependencyInjection;
 using NetCord.Gateway;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
@@ -12,14 +12,13 @@ using NetCord.Services.ComponentInteractions;
 
 namespace HollowCake.Bot.NetCord.Exceptions;
 
-public sealed class InteractionErrorHandler(InteractionErrorOptions? options = null) : 
+public sealed class InteractionErrorHandler(
+    InteractionErrorOptions options, ResponseService responses, EmbedFactory embeds) : 
     IApplicationCommandResultHandler<ApplicationCommandContext>, 
     IComponentInteractionResultHandler<ComponentInteractionContext>
 {
     private const int AlreadyAcknowledged = 40060;
     private const int UnknownMessage = 10008;
-    
-    private readonly InteractionErrorOptions _options = options ?? new InteractionErrorOptions();
 
     public ValueTask HandleResultAsync(
         IExecutionResult result, 
@@ -27,7 +26,7 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
         GatewayClient? client,
         ILogger logger, 
         IServiceProvider services) 
-        => HandleAsync(result, context.Interaction, logger, client, services);
+        => HandleAsync(result, context.Interaction, logger);
 
     public ValueTask HandleResultAsync(
         IExecutionResult result, 
@@ -35,29 +34,19 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
         GatewayClient? client,
         ILogger logger, 
         IServiceProvider services) 
-        => HandleAsync(result, context.Interaction, logger, client, services);
+        => HandleAsync(result, context.Interaction, logger);
 
-    internal async ValueTask HandleAsync(
-        IExecutionResult result,
-        Interaction interaction,
-        ILogger logger,
-        GatewayClient? client,
-        IServiceProvider services)
+    internal async ValueTask HandleAsync(IExecutionResult result, Interaction interaction, ILogger logger)
     {
         if (result is not IFailResult failure)
             return;
 
         var message = ResolveMessage(failure, logger);
-
-        var embed = new EmbedProperties()
-            .WithTitle(_options.Title)
-            .WithDescription(message)
-            .WithColor(_options.Color);
-
+        var embed = embeds.Error(options.Title, message);
+        
         try
         {
-            var rest = client?.Rest ?? services.GetRequiredService<RestClient>();
-            await RespondAsync(interaction, embed, rest);
+            await RespondAsync(interaction, embed);
         }
         catch (Exception e)
         {
@@ -82,55 +71,41 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
                 return botException.UserMessage;
             }
             logger.LogError(exception, "Unexpected interaction error.");
-            return _options.UnexpectedErrorMessage;
+            return options.UnexpectedErrorMessage;
         }
         logger.LogWarning("Interaction execution failed: {FailureMessage}", failure.Message);
-        return _options.ExecutionFailedMessage;
+        return options.ExecutionFailedMessage;
     }
 
-    private static async Task RespondAsync(Interaction interaction, EmbedProperties embed, RestClient rest)
+    private async Task RespondAsync(Interaction interaction, EmbedProperties embed)
     {
-        var message = new InteractionMessageProperties()
-            .AddEmbeds(embed)
-            .WithFlags(MessageFlags.Ephemeral);
-
         try
         {
-            await interaction.SendResponseAsync(InteractionCallback.Message(message));
+            await responses.RespondAsync(interaction, embed, true);
             return;
         }
-        catch (RestException exception)when (exception.Error?.Code == AlreadyAcknowledged)
+        catch (RestException r) when (r.Error?.Code == AlreadyAcknowledged)
         {
-            // Interaction already acknowledged.
+            // Ignore, the interaction has already been acknowledged.
         }
 
         RestMessage? original = null;
 
         try
         {
-            original = await rest.GetInteractionResponseAsync(interaction.ApplicationId, interaction.Token);
+            original = await responses.GetResponseAsync(interaction);
         }
-        catch (RestException exception)when (exception.Error?.Code == UnknownMessage)
+        catch (RestException r) when (r.Error?.Code == UnknownMessage)
         {
-            // No original response exists.
+            // Ignore, no original message was found.
         }
 
         if (original is not null && original.Flags.HasFlag(MessageFlags.Loading))
         {
-            await rest.ModifyInteractionResponseAsync(
-                interaction.ApplicationId,
-                interaction.Token,
-                response =>
-                {
-                    response.AddEmbeds(embed);
-                });
-
+            await responses.ModifyResponseAsync(interaction, embed);
             return;
         }
-
-        await rest.SendInteractionFollowupMessageAsync(
-            interaction.ApplicationId,
-            interaction.Token,
-            message);
+        
+        await responses.FollowupAsync(interaction, embed, true);
     }
 }
