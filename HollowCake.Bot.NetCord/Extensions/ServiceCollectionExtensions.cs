@@ -1,4 +1,5 @@
 ﻿using HollowCake.Bot.NetCord.Exceptions;
+using HollowCake.Bot.NetCord.Responses;
 using Microsoft.Extensions.DependencyInjection;
 using NetCord;
 using NetCord.Hosting.Services.ComponentInteractions;
@@ -13,12 +14,22 @@ public static class ServiceCollectionExtensions
         public IServiceCollection AddHollowCakeErrorHandling(Action<InteractionErrorOptions>? config = null)
         {
             var options = new InteractionErrorOptions();
-            
             config?.Invoke(options);
             
             services.AddSingleton(options);
             services.AddSingleton<InteractionErrorHandler>();
             services.AddSingleton(typeof(ComponentInteractionErrorHandler<>));
+            
+            return services;
+        }
+        
+        public IServiceCollection AddHollowCakeResponses(Action<ResponseOptions>? config = null)
+        {
+            var options = new ResponseOptions();
+            config?.Invoke(options);
+            
+            services.AddSingleton(options);
+            services.AddSingleton<EmbedFactory>();
             
             return services;
         }

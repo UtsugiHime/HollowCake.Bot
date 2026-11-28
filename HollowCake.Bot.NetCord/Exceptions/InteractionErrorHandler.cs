@@ -91,7 +91,7 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
     private static async Task RespondAsync(Interaction interaction, EmbedProperties embed, RestClient rest)
     {
         var message = new InteractionMessageProperties()
-            .WithEmbeds([embed])
+            .AddEmbeds(embed)
             .WithFlags(MessageFlags.Ephemeral);
 
         try
@@ -122,7 +122,7 @@ public sealed class InteractionErrorHandler(InteractionErrorOptions? options = n
                 interaction.Token,
                 response =>
                 {
-                    response.WithEmbeds([embed]);
+                    response.AddEmbeds(embed);
                 });
 
             return;
